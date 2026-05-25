@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createTheme, ThemeProvider, CssBaseline } from "@mui/material";
-import LoginPage from "./pages/LoginPage";
 import BoardPage from "./pages/BoardPage";
+import OnboardPage from "./pages/OnboardPage";
 
 const theme = createTheme({
   palette: { mode: "dark" },
@@ -9,14 +9,19 @@ const theme = createTheme({
 });
 
 export default function App() {
-  const [authed, setAuthed] = useState(!!localStorage.getItem("token"));
+  const [view, setView] = useState<"onboard" | "board">(
+    window.location.hash === "#board" ? "board" : "onboard"
+  );
+
+  const goBoard = () => { window.location.hash = "board"; setView("board"); };
+  const goOnboard = () => { window.location.hash = ""; setView("onboard"); };
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      {authed
-        ? <BoardPage onLogout={() => { localStorage.removeItem("token"); setAuthed(false); }} />
-        : <LoginPage onLogin={() => setAuthed(true)} />
+      {view === "onboard"
+        ? <OnboardPage onEnterBoard={goBoard} />
+        : <BoardPage onSetup={goOnboard} />
       }
     </ThemeProvider>
   );
