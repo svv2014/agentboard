@@ -2,6 +2,16 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+
+TITLE_MAX = 255
+DESC_MAX = 10_000
+GROUP_NAME_MAX = 100
+META_KEYS_MAX = 50
+
+
+def _validate_str(value: str, field: str, max_len: int) -> None:
+    if len(value) > max_len:
+        raise ValueError(f"{field} too long (max {max_len} chars)")
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.board import Board
@@ -122,6 +132,7 @@ def handle_tool(name: str, params: dict, board: Board, db: Session) -> dict:
         return {"groups": [{"id": g.id, "name": g.name, "statuses": g.statuses, "position": g.position} for g in groups]}
 
     if name == "create_group":
+        _validate_str(params["name"], "name", GROUP_NAME_MAX)
         pos = db.query(Group).filter(Group.board_id == board.id).count()
         group = Group(
             board_id=board.id,
@@ -143,6 +154,9 @@ def handle_tool(name: str, params: dict, board: Board, db: Session) -> dict:
         return {"items": [_item_dict(i) for i in items]}
 
     if name == "create_item":
+        _validate_str(params["title"], "title", TITLE_MAX)
+        if params.get("description"):
+            _validate_str(params["description"], "description", DESC_MAX)
         group = db.query(Group).filter(Group.id == params["group_id"], Group.board_id == board.id).first()
         if not group:
             raise ValueError(f"Group {params['group_id']} not found")
@@ -173,6 +187,12 @@ def handle_tool(name: str, params: dict, board: Board, db: Session) -> dict:
         return _item_dict(item)
 
     if name == "update_item":
+        if params.get("title"):
+            _validate_str(params["title"], "title", TITLE_MAX)
+        if params.get("description"):
+            _validate_str(params["description"], "description", DESC_MAX)
+        if params.get("metadata") and len(params["metadata"]) > META_KEYS_MAX:
+            raise ValueError(f"metadata too many keys (max {META_KEYS_MAX})")
         item = db.query(Item).join(Group).filter(Item.id == params["item_id"], Group.board_id == board.id, Item.deleted_at.is_(None)).first()
         if not item:
             raise ValueError(f"Item {params['item_id']} not found")
