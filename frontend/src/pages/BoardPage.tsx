@@ -1,11 +1,21 @@
-import { useEffect, useState } from "react";
-import { Box, Chip, Typography, Card, CardContent, CircularProgress, AppBar, Toolbar, Tooltip, Button, Collapse, IconButton } from "@mui/material";
+import { useEffect, useState, useRef } from "react";
+import { Box, Chip, Typography, Card, CardContent, CircularProgress, AppBar, Toolbar, Tooltip, Button, Collapse, IconButton, Menu, MenuItem } from "@mui/material";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import SettingsIcon from "@mui/icons-material/Settings";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import api from "../api";
+
+const REFRESH_OPTIONS = [
+  { label: "3s", ms: 3000 },
+  { label: "5s", ms: 5000 },
+  { label: "10s", ms: 10000 },
+  { label: "30s", ms: 30000 },
+  { label: "1m", ms: 60000 },
+  { label: "off", ms: 0 },
+];
 
 interface Item {
   id: number;
@@ -64,6 +74,9 @@ export default function BoardPage({ onSetup }: { onSetup?: () => void }) {
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [collapsedGroups, setCollapsedGroups] = useState<Record<number, boolean>>({});
   const [hideEmpty, setHideEmpty] = useState(() => loadCollapsed("ab_hideEmpty", true));
+  const [refreshMs, setRefreshMs] = useState(() => parseInt(localStorage.getItem("ab_refreshMs") ?? "5000"));
+  const [refreshAnchor, setRefreshAnchor] = useState<null | HTMLElement>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = () =>
     api.get("/board/").then(({ data }) => {
@@ -74,9 +87,12 @@ export default function BoardPage({ onSetup }: { onSetup?: () => void }) {
 
   useEffect(() => {
     refresh();
-    const interval = setInterval(refresh, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (refreshMs > 0) {
+      intervalRef.current = setInterval(refresh, refreshMs);
+    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [refreshMs]);
 
   const toggleGroup = (id: number) => {
     setCollapsedGroups((prev) => {
@@ -113,16 +129,44 @@ export default function BoardPage({ onSetup }: { onSetup?: () => void }) {
           <Chip label={`${activeItems} active`} size="small" sx={{ bgcolor: "#1a2a1a", color: "#22c55e", fontWeight: 600 }} />
           <Chip label={`${totalItems} total`} size="small" sx={{ bgcolor: "#1a1a2a", color: "#6366f1", fontWeight: 600 }} />
           <Tooltip title={hideEmpty ? "Show empty columns" : "Hide empty columns"}>
-            <IconButton
-              size="small"
-              onClick={toggleHideEmpty}
-              sx={{ color: hideEmpty ? "#6366f1" : "grey.700", ml: 0.5 }}
-            >
+            <IconButton size="small" onClick={toggleHideEmpty} sx={{ color: hideEmpty ? "#6366f1" : "grey.700", ml: 0.5 }}>
               <VisibilityOffIcon fontSize="small" />
             </IconButton>
           </Tooltip>
+          {/* Refresh interval picker */}
+          <Tooltip title="Refresh interval">
+            <Button
+              size="small"
+              endIcon={<RefreshIcon sx={{ fontSize: "12px !important" }} />}
+              onClick={(e) => setRefreshAnchor(e.currentTarget)}
+              sx={{ color: "grey.600", fontSize: "0.7rem", minWidth: 0, px: 1, ml: 0.5, "&:hover": { color: "grey.300" } }}
+            >
+              {REFRESH_OPTIONS.find((o) => o.ms === refreshMs)?.label ?? "5s"}
+            </Button>
+          </Tooltip>
+          <Menu
+            anchorEl={refreshAnchor}
+            open={Boolean(refreshAnchor)}
+            onClose={() => setRefreshAnchor(null)}
+            slotProps={{ paper: { sx: { bgcolor: "#1a1a1a", border: "1px solid #333", minWidth: 80 } } }}
+          >
+            {REFRESH_OPTIONS.map((opt) => (
+              <MenuItem
+                key={opt.ms}
+                selected={opt.ms === refreshMs}
+                onClick={() => {
+                  setRefreshMs(opt.ms);
+                  localStorage.setItem("ab_refreshMs", String(opt.ms));
+                  setRefreshAnchor(null);
+                }}
+                sx={{ fontSize: "0.8rem", color: opt.ms === refreshMs ? "#6366f1" : "grey.300", py: 0.5 }}
+              >
+                {opt.label}
+              </MenuItem>
+            ))}
+          </Menu>
           <Typography variant="caption" color="grey.700" ml={0.5}>
-            {timeAgo(lastRefresh.toISOString())}
+            {refreshMs === 0 ? "paused" : timeAgo(lastRefresh.toISOString())}
           </Typography>
           {onSetup && (
             <IconButton size="small" onClick={onSetup} sx={{ color: "grey.700", "&:hover": { color: "grey.300" } }}>
