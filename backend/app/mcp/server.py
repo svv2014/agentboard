@@ -1,14 +1,13 @@
-"""MCP server — JSON-RPC 2.0 over HTTP, Bearer token auth."""
+"""MCP server — JSON-RPC 2.0 over HTTP, no auth (single-tenant local mode)."""
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models.user import User
 from app.models.board import Board
-from app.models.group import Group
+from app.models.group import Group, DEFAULT_STATUSES
 from app.models.item import Item
-from app.api.deps import get_user_from_mcp_key
+from app.api.deps import get_default_board
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
 
@@ -34,7 +33,7 @@ TOOLS = [
                 "group_id": {"type": "integer"},
                 "title": {"type": "string"},
                 "description": {"type": "string"},
-                "status": {"type": "string", "default": "triage"},
+                "status": {"type": "string"},
                 "created_by": {"type": "string"},
             },
         },
@@ -117,41 +116,12 @@ def _item_dict(item: Item) -> dict:
     }
 
 
-def _get_board(user: User, db: Session) -> Board:
-    board = db.query(Board).filter(Board.user_id == user.id).first()
-    if not board:
-        raise ValueError("No board found for user")
-    return board
-
-
-def _get_group(group_id: int, board: Board, db: Session) -> Group:
-    group = db.query(Group).filter(Group.id == group_id, Group.board_id == board.id).first()
-    if not group:
-        raise ValueError(f"Group {group_id} not found")
-    return group
-
-
-def _get_item(item_id: int, board: Board, db: Session) -> Item:
-    item = (
-        db.query(Item)
-        .join(Group)
-        .filter(Item.id == item_id, Group.board_id == board.id, Item.deleted_at.is_(None))
-        .first()
-    )
-    if not item:
-        raise ValueError(f"Item {item_id} not found")
-    return item
-
-
-def handle_tool(name: str, params: dict, user: User, db: Session) -> dict:
-    board = _get_board(user, db)
-
+def handle_tool(name: str, params: dict, board: Board, db: Session) -> dict:
     if name == "list_groups":
         groups = db.query(Group).filter(Group.board_id == board.id).order_by(Group.position).all()
         return {"groups": [{"id": g.id, "name": g.name, "statuses": g.statuses, "position": g.position} for g in groups]}
 
     if name == "create_group":
-        from app.models.group import DEFAULT_STATUSES
         pos = db.query(Group).filter(Group.board_id == board.id).count()
         group = Group(
             board_id=board.id,
@@ -173,10 +143,12 @@ def handle_tool(name: str, params: dict, user: User, db: Session) -> dict:
         return {"items": [_item_dict(i) for i in items]}
 
     if name == "create_item":
-        group = _get_group(params["group_id"], board, db)
+        group = db.query(Group).filter(Group.id == params["group_id"], Group.board_id == board.id).first()
+        if not group:
+            raise ValueError(f"Group {params['group_id']} not found")
         status = params.get("status", group.statuses[0] if group.statuses else "triage")
         if status not in group.statuses:
-            raise ValueError(f"Status '{status}' not in group statuses: {group.statuses}")
+            raise ValueError(f"Status '{status}' not valid. Choose from: {group.statuses}")
         item = Item(
             group_id=group.id,
             title=params["title"],
@@ -189,17 +161,21 @@ def handle_tool(name: str, params: dict, user: User, db: Session) -> dict:
         return _item_dict(item)
 
     if name == "move_item":
-        item = _get_item(params["item_id"], board, db)
+        item = db.query(Item).join(Group).filter(Item.id == params["item_id"], Group.board_id == board.id, Item.deleted_at.is_(None)).first()
+        if not item:
+            raise ValueError(f"Item {params['item_id']} not found")
         group = db.get(Group, item.group_id)
         if params["status"] not in group.statuses:
-            raise ValueError(f"Status '{params['status']}' not in group statuses: {group.statuses}")
+            raise ValueError(f"Status '{params['status']}' not valid. Choose from: {group.statuses}")
         item.status = params["status"]
         item.updated_at = datetime.now(timezone.utc)
         db.commit()
         return _item_dict(item)
 
     if name == "update_item":
-        item = _get_item(params["item_id"], board, db)
+        item = db.query(Item).join(Group).filter(Item.id == params["item_id"], Group.board_id == board.id, Item.deleted_at.is_(None)).first()
+        if not item:
+            raise ValueError(f"Item {params['item_id']} not found")
         if "title" in params:
             item.title = params["title"]
         if "description" in params:
@@ -211,10 +187,15 @@ def handle_tool(name: str, params: dict, user: User, db: Session) -> dict:
         return _item_dict(item)
 
     if name == "get_item":
-        return _item_dict(_get_item(params["item_id"], board, db))
+        item = db.query(Item).join(Group).filter(Item.id == params["item_id"], Group.board_id == board.id, Item.deleted_at.is_(None)).first()
+        if not item:
+            raise ValueError(f"Item {params['item_id']} not found")
+        return _item_dict(item)
 
     if name == "delete_item":
-        item = _get_item(params["item_id"], board, db)
+        item = db.query(Item).join(Group).filter(Item.id == params["item_id"], Group.board_id == board.id, Item.deleted_at.is_(None)).first()
+        if not item:
+            raise ValueError(f"Item {params['item_id']} not found")
         item.deleted_at = datetime.now(timezone.utc)
         db.commit()
         return {"deleted": True, "id": item.id}
@@ -225,7 +206,7 @@ def handle_tool(name: str, params: dict, user: User, db: Session) -> dict:
 @router.post("/")
 async def mcp_endpoint(
     request: Request,
-    user: User = Depends(get_user_from_mcp_key),
+    board: Board = Depends(get_default_board),
     db: Session = Depends(get_db),
 ):
     body = await request.json()
@@ -238,7 +219,7 @@ async def mcp_endpoint(
         tool_name = body["params"]["name"]
         tool_params = body["params"].get("arguments", {})
         try:
-            result = handle_tool(tool_name, tool_params, user, db)
+            result = handle_tool(tool_name, tool_params, board, db)
             return JSONResponse({"jsonrpc": "2.0", "id": rpc_id, "result": {"content": [{"type": "text", "text": str(result)}], "data": result}})
         except ValueError as e:
             return JSONResponse({"jsonrpc": "2.0", "id": rpc_id, "error": {"code": -32602, "message": str(e)}})

@@ -1,4 +1,4 @@
-"""Initial schema
+"""Initial schema — single tenant, no auth
 
 Revision ID: 001
 Revises:
@@ -15,25 +15,8 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "users",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("email", sa.String(255), unique=True, nullable=False),
-        sa.Column("password_hash", sa.String(255), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-    )
-    op.create_table(
-        "mcp_keys",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
-        sa.Column("key", sa.String(64), unique=True, nullable=False),
-        sa.Column("name", sa.String(100), nullable=False, server_default="default"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
-    )
-    op.create_table(
         "boards",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("name", sa.String(100), nullable=False, server_default="My Board"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
@@ -65,5 +48,3 @@ def downgrade() -> None:
     op.drop_table("items")
     op.drop_table("groups")
     op.drop_table("boards")
-    op.drop_table("mcp_keys")
-    op.drop_table("users")

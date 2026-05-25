@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 from jose import jwt
 from passlib.context import CryptContext
 from app.core.config import settings
@@ -20,7 +21,7 @@ def create_access_token(subject: str) -> str:
     return jwt.encode({"sub": subject, "exp": expire}, settings.secret_key, algorithm=ALGORITHM)
 
 
-def decode_token(token: str) -> str | None:
+def decode_token(token: str) -> Optional[str]:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
         return payload.get("sub")
