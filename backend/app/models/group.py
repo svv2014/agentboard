@@ -3,7 +3,7 @@ from sqlalchemy import String, DateTime, ForeignKey, Integer, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.session import Base
 
-DEFAULT_STATUSES = ["triage", "todo", "doing", "blocked", "done"]
+DEFAULT_STATUSES = ["triage", "todo", "in-progress", "blocked", "done"]
 
 
 class Group(Base):

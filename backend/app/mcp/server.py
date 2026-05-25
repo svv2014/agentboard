@@ -24,7 +24,7 @@ router = APIRouter(prefix="/mcp", tags=["mcp"])
 TOOLS = [
     {
         "name": "list_board",
-        "description": "List items on the board, optionally filtered by group or status.",
+        "description": "List items on the board, optionally filtered by project (group_id) or status.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -35,7 +35,7 @@ TOOLS = [
     },
     {
         "name": "create_item",
-        "description": "Create a new task item in a group.",
+        "description": "Create a new task item in a project (group_id).",
         "inputSchema": {
             "type": "object",
             "required": ["group_id", "title"],
@@ -94,7 +94,7 @@ TOOLS = [
     },
     {
         "name": "create_group",
-        "description": "Create a new group with optional custom statuses.",
+        "description": "Create a new project (group) with optional custom statuses/stages.",
         "inputSchema": {
             "type": "object",
             "required": ["name"],
@@ -106,7 +106,7 @@ TOOLS = [
     },
     {
         "name": "list_groups",
-        "description": "List all groups and their statuses.",
+        "description": "List all projects (groups) and their statuses/stages.",
         "inputSchema": {"type": "object", "properties": {}},
     },
 ]

@@ -189,7 +189,7 @@ export default function OnboardPage({ onEnterBoard }: { onEnterBoard: () => void
           Available MCP tools
         </Typography>
         <Box display="flex" flexWrap="wrap" gap={1} mb={4}>
-          {["list_board", "create_item", "move_item", "update_item", "get_item", "delete_item", "create_group", "list_groups"].map((tool) => (
+          {["list_board", "create_item", "move_item", "update_item", "get_item", "delete_item", "create_group (project)", "list_groups (projects)"].map((tool) => (
             <Chip
               key={tool}
               label={tool}

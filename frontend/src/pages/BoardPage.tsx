@@ -26,7 +26,7 @@ interface Item {
   updated_at: string;
 }
 
-interface Group {
+interface Project {
   id: number;
   name: string;
   statuses: string[];
@@ -36,7 +36,7 @@ interface Group {
 interface Board {
   id: number;
   name: string;
-  groups: Group[];
+  groups: Project[];
 }
 
 const STATUS_COLORS: Record<string, string> = {
